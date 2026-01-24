@@ -1,6 +1,6 @@
-name: Java CI - Java 1.8
+name: Secure Java CI/CD - DevSecOps
 
-# Trigger the workflow on push or pull request to main branch
+# Trigger workflow on push or pull request to main branch
 on:
   push:
     branches: [ main ]
@@ -12,9 +12,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout your code from GitHub
+      # Step 1: Checkout code from GitHub
       - name: Checkout code
         uses: actions/checkout@v3
+        # Needed to access your repo files for build, tests, and scans
 
       # Step 2: Set up Java 1.8
       - name: Set up JDK 1.8
@@ -22,12 +23,61 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '8'
+        # Java 1.8 is required for your ecommerce-app and Maven build
 
-      # Step 3: Build your project with Maven
+      # Step 3: Build project with Maven
       - name: Build with Maven
         run: mvn clean install
+        # Compiles your code, downloads dependencies, and ensures project is buildable
 
       # Step 4: Run unit tests
       - name: Run Tests
         run: mvn test
-    
+        # Verifies application logic is correct and ensures CI breaks on failing tests
+
+      # Step 5: Run Snyk Scan (SAST + SCA)
+      - name: Run Snyk Scan
+        uses: snyk/actions/java@v2
+        with:
+          command: test
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        # Scans code and dependencies for known vulnerabilities (OWASP Top 10 & CVEs)
+
+      # Step 6: OWASP Dependency Check
+      - name: OWASP Dependency Check
+        run: mvn org.owasp:dependency-check-maven:check
+        # Extra layer of dependency vulnerability scanning to catch anything missed by Snyk
+
+      # Step 7: SonarQube Analysis
+      - name: SonarQube Scan
+        uses: sonarsource/sonarcloud-github-action@v2
+        with:
+          projectBaseDir: .
+          args: >
+            -Dsonar.projectKey=your_project_key
+            -Dsonar.organization=your_org_key
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+        # Static code analysis for security hotspots, code smells, coverage and enforcing Quality Gates
+
+      # Step 8: Fail build if SonarQube Quality Gate fails
+      - name: Check SonarQube Quality Gate
+        run: |
+          status=$(curl -s -u ${{ secrets.SONAR_TOKEN }} "https://sonarcloud.io/api/qualitygates/project_status?projectKey=your_project_key" | jq -r '.projectStatus.status')
+          if [ "$status" != "OK" ]; then
+            echo "SonarQube Quality Gate failed: $status"
+            exit 1
+        # Ensures workflow fails if critical/security issues are found (enforcing DevSecOps gates)
+
+      # Step 9: GitLeaks Scan for secrets detection
+      - name: GitLeaks Scan
+        uses: zricethezav/gitleaks-action@v2
+        with:
+          args: "--redact"
+        # Prevents accidental commits of secrets, passwords, API keys, or tokens (OWASP secret exposure)
+
+      # Step 10: Optional: Checkstyle / code formatting (enforce coding standards)
+      - name: Run Checkstyle
+        run: mvn checkstyle:check
+        # Enforces consistent code formatting and reduces human errors that could lead to vulnerabilities
