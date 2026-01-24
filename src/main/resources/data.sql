@@ -1,0 +1,15 @@
+INSERT INTO PRODUCT (name, price) VALUES ('Laptop',900);
+INSERT INTO PRODUCT (name, price) VALUES ('Smartphone',500);
+INSERT INTO PRODUCT (name, price) VALUES ('Headphones',100);
+INSERT INTO PRODUCT (name, price) VALUES ('Keyboard',50);
+INSERT INTO PRODUCT (name, price) VALUES ('Mouse',30);
+INSERT INTO PRODUCT (name, price) VALUES ('Monitor',200);
+INSERT INTO PRODUCT (name, price) VALUES ('Printer',150);
+INSERT INTO PRODUCT (name, price) VALUES ('Webcam',80);
+INSERT INTO PRODUCT (name, price) VALUES ('Speaker',120);
+INSERT INTO PRODUCT (name, price) VALUES ('External HDD',100);
+INSERT INTO PRODUCT (name, price) VALUES ('SSD',150);
+INSERT INTO PRODUCT (name, price) VALUES ('Router',60);
+INSERT INTO PRODUCT (name, price) VALUES ('Tablet',300);
+INSERT INTO PRODUCT (name, price) VALUES ('Charger',20);
+INSERT INTO PRODUCT (name, price) VALUES ('USB Cable',10);
