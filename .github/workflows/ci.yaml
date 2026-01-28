@@ -15,7 +15,6 @@ jobs:
       # Step 1: Checkout code from GitHub
       - name: Checkout code
         uses: actions/checkout@v3
-        # Needed to access your repo files for build, tests, and scans
 
       # Step 2: Set up Java 1.8
       - name: Set up JDK 1.8
@@ -23,17 +22,14 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '8'
-        # Java 1.8 is required for your ecommerce-app and Maven build
 
       # Step 3: Build project with Maven
       - name: Build with Maven
         run: mvn clean install
-        # Compiles your code, downloads dependencies, and ensures project is buildable
 
       # Step 4: Run unit tests
       - name: Run Tests
         run: mvn test
-        # Verifies application logic is correct and ensures CI breaks on failing tests
 
       # Step 5: Run Snyk Scan (SAST + SCA)
       - name: Run Snyk Scan
@@ -42,12 +38,10 @@ jobs:
           command: test
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        # Scans code and dependencies for known vulnerabilities (OWASP Top 10 & CVEs)
 
       # Step 6: OWASP Dependency Check
       - name: OWASP Dependency Check
         run: mvn org.owasp:dependency-check-maven:check
-        # Extra layer of dependency vulnerability scanning to catch anything missed by Snyk
 
       # Step 7: SonarQube Analysis
       - name: SonarQube Scan
@@ -59,7 +53,6 @@ jobs:
             -Dsonar.organization=your_org_key
             -Dsonar.host.url=https://sonarcloud.io
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-        # Static code analysis for security hotspots, code smells, coverage and enforcing Quality Gates
 
       # Step 8: Fail build if SonarQube Quality Gate fails
       - name: Check SonarQube Quality Gate
@@ -68,16 +61,35 @@ jobs:
           if [ "$status" != "OK" ]; then
             echo "SonarQube Quality Gate failed: $status"
             exit 1
-        # Ensures workflow fails if critical/security issues are found (enforcing DevSecOps gates)
 
       # Step 9: GitLeaks Scan for secrets detection
       - name: GitLeaks Scan
         uses: zricethezav/gitleaks-action@v2
         with:
           args: "--redact"
-        # Prevents accidental commits of secrets, passwords, API keys, or tokens (OWASP secret exposure)
 
-      # Step 10: Optional: Checkstyle / code formatting (enforce coding standards)
+      # Step 10: Optional: Checkstyle / code formatting
       - name: Run Checkstyle
         run: mvn checkstyle:check
-        # Enforces consistent code formatting and reduces human errors that could lead to vulnerabilities
+
+      # Step 11: Set up Python for Checkov
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      # Step 12: Install Checkov
+      - name: Install Checkov
+        run: pip install checkov
+
+      # Step 13: Run Checkov on terraform folder if it has changes
+      - name: Run Checkov on Terraform
+        if: ${{ github.event.head_commit.added || github.event.head_commit.modified || github.event.head_commit.removed }}
+        run: |
+          echo "Checking if terraform folder has changes..."
+          CHANGED=$(git diff --name-only ${{ github.sha }} ${{ github.event.before }} | grep '^terraform/')
+          if [ -n "$CHANGED" ]; then
+            echo "Terraform changes detected. Running Checkov..."
+            checkov -d ./terraform
+          else
+            echo "No Terraform changes detected. Skipping Checkov."
