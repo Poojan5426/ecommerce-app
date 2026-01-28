@@ -8,36 +8,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout code
-      - name: Checkout code
+      # 1. Checkout (only for scripts/docs if needed)
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Set up Java
-      - name: Set up JDK 1.8
-        uses: actions/setup-java@v3
+      # 2. Download artifact produced by CI
+      - name: Download build artifact from CI
+        uses: actions/download-artifact@v3
         with:
-          distribution: temurin
-          java-version: '8'
+          name: ecommerce-artifact
+          path: ./artifact
 
-      # 3. Build artifact (immutable build)
-      - name: Build JAR
-        run: mvn clean package -DskipTests
+      # 3. Verify artifact integrity locally (CI vs CD)
+      - name: Verify checksum (CD side)
+        run: |
+          cd artifact
+          EXPECTED_HASH=$(awk '{print $1}' checksum.txt)
+          ACTUAL_HASH=$(sha256sum *.jar | awk '{print $1}')
 
-      # 4. Verify artifact integrity
-      - name: Generate checksum
-        run: sha256sum target/*.jar > checksum.txt
+          if [ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]; then
+            echo "Artifact integrity check FAILED"
+            exit 1
+          fi
 
-      # 5. Copy JAR to EC2
+          echo "Artifact integrity verified"
+
+      # 4. Copy artifact + checksum to EC2
       - name: Copy artifact to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "target/*.jar"
+          source: "artifact/*"
           target: "/opt/app/"
 
-      # 6. Deploy on EC2
+      # 5. Verify again on EC2 + Deploy
       - name: Deploy application
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -45,17 +51,27 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            cd /opt/app
+
+            EXPECTED_HASH=$(awk '{print $1}' checksum.txt)
+            ACTUAL_HASH=$(sha256sum *.jar | awk '{print $1}')
+
+            if [ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]; then
+              echo "EC2 integrity check FAILED"
+              exit 1
+            fi
+
             sudo systemctl stop ecommerce-app || true
-            sudo cp /opt/app/*.jar /opt/ecommerce/ecommerce.jar
+            sudo cp *.jar /opt/ecommerce/ecommerce.jar
             sudo systemctl start ecommerce-app
 
-      # 7. Smoke test (health check)
+      # 6. Smoke test
       - name: Smoke Test
         run: |
           sleep 20
           curl -f http://${{ secrets.EC2_HOST }}:8080/actuator/health
 
-      # 8. Rollback on failure
+      # 7. Rollback on failure
       - name: Rollback on failure
         if: failure()
         uses: appleboy/ssh-action@v0.1.10
