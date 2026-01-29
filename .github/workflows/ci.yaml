@@ -74,17 +74,32 @@ jobs:
       - name: Run Checkstyle
         run: mvn checkstyle:check
 
-      # 11. Set up Python (required for Checkov)
+          # 11. Docker build (REQUIRED for Trivy)
+      - name: Build Docker image
+        run: |
+          docker build -t my-springboot-app:latest .
+
+      # 12. Trivy image scan (CONTAINER SECURITY)
+      - name: Trivy Image Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: my-springboot-app:latest
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
+
+
+      # 13. Set up Python (required for Checkov)
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
-      # 12. Install Checkov
+      # 14. Install Checkov
       - name: Install Checkov
         run: pip install checkov
 
-      # 13. Run Checkov only if terraform folder exists
+      # 15. Run Checkov only if terraform folder exists
       - name: Run Checkov on Terraform
         run: |
           if [ -d "terraform" ]; then
@@ -94,12 +109,12 @@ jobs:
             echo "No terraform directory found. Skipping Checkov."
           fi
 
-      # 14. Generate checksum for artifact integrity
+      # 16. Generate checksum for artifact integrity
       - name: Generate artifact checksum
         run: |
           sha256sum target/*.jar > checksum.txt
 
-      # 15. Upload artifact (JAR + checksum) for CD
+      # 17. Upload artifact (JAR + checksum) for CD
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
