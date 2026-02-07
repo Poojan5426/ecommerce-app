@@ -6,24 +6,28 @@ on:
     workflows: ["Terraform Deployment"]
     types:
       - completed
-      
+
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout (only for scripts/docs if needed)
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Download artifact produced by CI
+      # 2. Download build artifact from CI
       - name: Download build artifact from CI
         uses: actions/download-artifact@v3
         with:
           name: ecommerce-artifact
           path: ./artifact
 
-      # 3. Verify artifact integrity locally (CI vs CD)
+      # 3. Verify artifact integrity locally (CD side)
       - name: Verify checksum (CD side)
         run: |
           cd artifact
@@ -37,26 +41,37 @@ jobs:
 
           echo "Artifact integrity verified"
 
-      # 4. Copy artifact + checksum to EC2
+      # 4. Fetch EC2 Host and SSH Key from Vault
+      - name: Fetch EC2 secrets from Vault
+        id: vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: http://PUBLIC_IP_OF_VAULT:PORT_NUMBER
+          role: gh-actions-role
+          method: jwt
+          secrets: |
+            ec2/deploy host | EC2_HOST
+            ec2/deploy private_key | EC2_SSH_KEY
+
+      # 5. Copy artifact to EC2
       - name: Copy artifact to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ steps.vault.outputs.EC2_HOST }}
           username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ steps.vault.outputs.EC2_SSH_KEY }}
           source: "artifact/*"
           target: "/opt/app/"
 
-      # 5. Verify again on EC2 + Deploy
+      # 6. Deploy application on EC2
       - name: Deploy application
         uses: appleboy/ssh-action@v0.1.10
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ steps.vault.outputs.EC2_HOST }}
           username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ steps.vault.outputs.EC2_SSH_KEY }}
           script: |
             cd /opt/app
-
             EXPECTED_HASH=$(awk '{print $1}' checksum.txt)
             ACTUAL_HASH=$(sha256sum *.jar | awk '{print $1}')
 
@@ -69,20 +84,20 @@ jobs:
             sudo cp *.jar /opt/ecommerce/ecommerce.jar
             sudo systemctl start ecommerce-app
 
-      # 6. Smoke test
+      # 7. Smoke test
       - name: Smoke Test
         run: |
           sleep 20
-          curl -f http://${{ secrets.EC2_HOST }}:8080/actuator/health
+          curl -f http://${{ steps.vault.outputs.EC2_HOST }}:8080/actuator/health
 
-      # 7. Rollback on failure
+      # 8. Rollback on failure
       - name: Rollback on failure
         if: failure()
         uses: appleboy/ssh-action@v0.1.10
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ steps.vault.outputs.EC2_HOST }}
           username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ steps.vault.outputs.EC2_SSH_KEY }}
           script: |
             sudo systemctl stop ecommerce-app
             sudo systemctl start ecommerce-app-previous
