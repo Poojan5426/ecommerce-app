@@ -2,7 +2,11 @@ name: Secure CD - Production Deployment
 
 on:
   workflow_dispatch:
-
+  workflow_run:
+    workflows: ["Terraform Deployment"]
+    types:
+      - completed
+      
 jobs:
   deploy:
     runs-on: ubuntu-latest
