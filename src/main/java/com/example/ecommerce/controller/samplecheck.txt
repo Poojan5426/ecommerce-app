@@ -1,2 +1,0 @@
-password=poojan123
-api_key=myapi123
